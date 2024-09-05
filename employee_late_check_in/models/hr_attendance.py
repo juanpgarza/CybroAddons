@@ -44,6 +44,7 @@ class HrAttendance(models.Model):
                         work_from = schedule.hour_from
                         result = '{0:02.0f}:{1:02.0f}'.format(*divmod(work_from * 60, 60))
 
+                        # Cuidado: el que ejecuta esto es el OdooBot, tiene que estar OK el tz del OdooBot
                         user_tz = self.env.user.tz
                         dt = rec.check_in
 
@@ -56,17 +57,25 @@ class HrAttendance(models.Model):
                         start_date = datetime.strptime(result, "%H:%M").time()
                         t1 = timedelta(hours=check_in_date.hour, minutes=check_in_date.minute)
                         t2 = timedelta(hours=start_date.hour, minutes=start_date.minute)
+                        # if rec.id == 480:
+                        #     import pdb; pdb.set_trace()
                         if check_in_date > start_date:
                             final = t1 - t2
                             rec.sudo().late_check_in = final.total_seconds() / 60
 
     def late_check_in_records(self):
         existing_records = self.env['late.check_in'].sudo().search([]).attendance_id.ids
+        # minutes_after: creo que es la tolerancia antes de considerarlo llegada tarde
         minutes_after = int(self.env['ir.config_parameter'].sudo().get_param('late_check_in_after')) or 0
+        # max_limit: creo que es el límite máximo para considerarlo como llegada tarde --> CUIDADO: le pongo 60 (120 no me funcionó, me tomaba 5!)
         max_limit = int(self.env['ir.config_parameter'].sudo().get_param('maximum_minutes')) or 0
         late_check_in_ids = self.sudo().search([('id', 'not in', existing_records)])
         for rec in late_check_in_ids:
-            late_check_in = rec.sudo().late_check_in + 210
+            # no entiendo porque le suma 210 minutos. Sin esto funciona OK
+            # late_check_in = rec.sudo().late_check_in + 210
+            late_check_in = rec.sudo().late_check_in
+            # if rec.id == 480:
+            #     import pdb; pdb.set_trace()
             if rec.late_check_in > minutes_after and late_check_in > minutes_after and late_check_in < max_limit:
                 self.env['late.check_in'].sudo().create({
                     'employee_id': rec.employee_id.id,
